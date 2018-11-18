@@ -1,0 +1,144 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+dt=0.001
+g=np.array([0,-9.8])
+plt.close('all')
+Kr1=200
+Kr2=5000
+internas=0
+def crear_rueda():
+    L=0.3
+    ro=0.5
+    x=[0.0]
+    y=[0.0]
+    linea,=plt.plot(0,0, 'ob')
+    ind=0
+    masas=[linea]
+    resortes=[]
+    vR=[ro, ro+L, ro+2*L]
+    for i in range(len(vR)):
+        tmp=[]
+        da=L/vR[i]*1
+        n=np.ceil(2*np.pi/da)
+        da=2*np.pi/n
+        ang=np.arange(0,2*np.pi-0.01,da)
+        xm=vR[i]*np.cos(ang)
+        ym=vR[i]*np.sin(ang)
+        for j in range(len(xm)):
+            tmp.append(ind)
+            ind+=1
+            x.append(xm[j])
+            y.append(ym[j])
+            linea,=plt.plot(xm[j], ym[j], 'ob')
+            #plt.text(xm[j], ym[j],str(len(x)-1))
+            masas.append(linea)
+        if(i==0):
+            internas=len(x)
+
+    x=np.array(x)
+    y=np.array(y)
+    
+    #Construcción de los resortes...
+    res=np.zeros((len(x),len(x)))
+    for i in range(len(x)):
+        dist=np.sqrt(np.power(x[i]-x,2)+np.power(y[i]-y,2))
+        #print(dist)
+        for k in range(5):
+            ind=np.argmin(dist)
+            #print(dist[ind])
+            if(dist[ind]>0):
+                res[i,ind]=dist[ind]
+                linea, =plt.plot([x[i],x[ind]],[y[i],y[ind]],'-k')
+                resortes.append((i,ind,dist[ind],Kr1,linea))
+                dist[ind]=10000
+            else:
+                dist[ind]=1000
+    for i in range(len(x)):
+        dist=np.sqrt(x[i]**2+y[i]**2)
+        if(dist>(ro)*0.95):
+            res[0,i]=dist
+            linea, =plt.plot([x[0],x[i]],[y[0],y[i]],'-b')
+            resortes.append((0,i,dist,Kr2,linea))
+                
+    #ro+4*L
+    return x,y,masas,resortes, internas
+
+x,y,masas, resortes, internas=crear_rueda()
+ymin=min(y)-0.1
+
+fig=plt.figure(1)
+ax=plt.subplot(111)
+ax.set_xlim(-2,2)
+ax.set_ylim(-2,2)
+
+m=0.2
+vx=np.zeros_like(x)
+vy=np.zeros_like(y)
+Fx=np.zeros_like(x)
+Fy=np.zeros_like(y)
+
+n=len(x) #Numero de masas
+t=0
+Kr=400
+Kv=2
+beta=10
+paso=50
+cont=paso
+Fo=0
+while(t<5.99):
+    cont=cont-1
+    Fx=np.zeros_like(x)-Kv*vx         #Inicializamos las masas a una fuerza igual al peso
+    Fy=np.zeros_like(y)-m*9.8-Kv*vy   #Inicializamos las masas a una fuerza igual al peso
+    if(t>0.5 and t<1):
+        Fo=(t-0.5)*150/0.5
+    for res in resortes:
+        i,j,Lo, kr,linea=res
+        r1=np.array([x[i],y[i]])
+        r2=np.array([x[j],y[j]])
+        v1=np.array([vx[i],vy[i]])
+        v2=np.array([vx[j],vy[j]])
+        d=np.linalg.norm(r2-r1)
+        mu=(r2-r1)/d
+        Fr=kr*(d-Lo)*(r2-r1)/d  #Fuerza de resorte
+        Fa=beta*np.dot(v2-v1,mu)*mu
+        
+        Fx[i]=Fx[i]+Fr[0]+Fa[0]
+        Fy[i]=Fy[i]+Fr[1]+Fa[1]
+        
+        Fx[j]=Fx[j]-Fr[0]-Fa[0]
+        Fy[j]=Fy[j]-Fr[1]-Fa[1]
+        
+    #Fuerzas de torque sobre las masas mas internas
+    rc=np.array([x[0],y[0]])
+    for i in range(1,internas):
+        ri=np.array([x[i],y[i]])
+        dr=ri-rc
+        u=dr/np.linalg.norm(dr)
+        u=np.array([u[1],-u[0]])
+        F=Fo*u
+        Fx[i]+=F[0]
+        Fy[i]+=F[1]
+        
+    x=x+vx*dt
+    y=y+vy*dt
+    vx=vx+Fx/m*dt
+    vy=vy+Fy/m*dt
+    t=t+dt
+    for i in range(len(masas)):
+        if(y[i]<ymin):
+            y[i]=ymin
+            vy[i]=-0.5*vy[i]
+            vx[i]=0.0*vx[i]
+    if(cont<=0):
+        cont=paso
+        for i in range(len(masas)):
+            masas[i].set_xdata(x[i])
+            masas[i].set_ydata(y[i])
+        for res in resortes:
+           i,j,Lo, kr,linea=res
+           linea.set_xdata([x[i],x[j]])
+           linea.set_ydata([y[i],y[j]])
+        plt.title(str(t))
+        fig.canvas.draw()
+        plt.pause(0.002)  
